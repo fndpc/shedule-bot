@@ -4,7 +4,12 @@ import logging
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import Message
-from bot.keyboards import MAIN_KEYBOARD
+from bot.keyboards import (
+    CURRENT_SCHEDULE_BUTTON_TEXT,
+    MAIN_KEYBOARD,
+    SUBSCRIBE_BUTTON_TEXT,
+    UNSUBSCRIBE_BUTTON_TEXT,
+)
 
 from config import BOT_TOKEN
 from db.session import SessionLocal, close_db, init_db
@@ -33,6 +38,12 @@ async def broadcast_schedule_update(bot: Bot, message_text: str) -> None:
             await bot.send_message(chat_id=chat_id, text=message_text)
         except Exception:
             logging.exception("Failed to send update to chat_id=%s", chat_id)
+
+
+async def get_current_schedule_message() -> str:
+    pdf_url = await asyncio.to_thread(fetch_latest_pdf_url)
+    schedule = await asyncio.to_thread(parse_schedule_from_pdf_url, pdf_url, TARGET_GROUP)
+    return format_schedule_message(schedule, pdf_url)
 
 
 async def schedule_polling_loop(bot: Bot) -> None:
@@ -70,11 +81,32 @@ async def main():
     @dp.message(Command("start"))
     async def cmd_start(message: Message):
         await message.answer(
-            "Чтобы получать расписание, нажми «Подписаться ✅».",
+            "Чтобы получать расписание, нажми «Подписаться ✅».\n"
+            "Для ручного запроса используй /schedule или кнопку «Текущее расписание 📅».",
             reply_markup=MAIN_KEYBOARD,
         )
 
-    @dp.message(F.text == "Подписаться ✅")
+    @dp.message(Command("schedule"))
+    async def cmd_schedule(message: Message):
+        await message.answer("Запрашиваю текущее расписание...")
+        try:
+            message_text = await get_current_schedule_message()
+            await message.answer(message_text)
+        except Exception:
+            logging.exception("Manual schedule request failed")
+            await message.answer("Не удалось получить расписание. Попробуй позже.")
+
+    @dp.message(F.text == CURRENT_SCHEDULE_BUTTON_TEXT)
+    async def msg_current_schedule(message: Message):
+        await message.answer("Запрашиваю текущее расписание...")
+        try:
+            message_text = await get_current_schedule_message()
+            await message.answer(message_text)
+        except Exception:
+            logging.exception("Manual schedule request from button failed")
+            await message.answer("Не удалось получить расписание. Попробуй позже.")
+
+    @dp.message(F.text == SUBSCRIBE_BUTTON_TEXT)
     async def msg_subscribe(message: Message):
         chat_id = message.chat.id
         async with SessionLocal() as session:
@@ -85,7 +117,7 @@ async def main():
         else:
             await message.answer("Ты уже подписан.")
 
-    @dp.message(F.text == "Отписаться ❎")
+    @dp.message(F.text == UNSUBSCRIBE_BUTTON_TEXT)
     async def msg_unsubscribe(message: Message):
         chat_id = message.chat.id
         async with SessionLocal() as session:
