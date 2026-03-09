@@ -96,11 +96,13 @@ docker run -d \
   --name schedule-bot \
   --restart unless-stopped \
   --env-file .env \
-  -e DATABASE_URL=sqlite+aiosqlite:///app/data/db.sqlite \
+  -e DATABASE_URL=sqlite+aiosqlite:////app/data/db.sqlite \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/downloads:/app/downloads \
   schedule-bot
 ```
+
+Примечание: для абсолютного пути SQLite внутри контейнера нужен формат с 4 слэшами после `sqlite+aiosqlite:`.
 
 ## Как пользоваться в Telegram
 
